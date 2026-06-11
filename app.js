@@ -117,7 +117,7 @@ function saveLocal() { localStorage.setItem('abfahrt:local', JSON.stringify(loca
 const PARTYKIT_HOST = (() => {
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1' || h === '') return 'localhost:1999';
-  return 'abfahrt.nm2e12312343.partykit.dev';
+  return 'abfahrt-sync.nm2e12312343.partykit.dev';
 })();
 const WS_PROTO = PARTYKIT_HOST.startsWith('localhost') ? 'ws:' : 'wss:';
 
