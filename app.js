@@ -90,9 +90,9 @@ const urlRoom = new URLSearchParams(location.search).get('room');
 let local = JSON.parse(localStorage.getItem('abfahrt:local') || 'null') || {
   sound: false, theme: 'day', meId: null, tab: 'checklist', room: null,
 };
-const room = urlRoom || local.room || 'CRAFT-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-local.room = room;
-const KEY = 'abfahrt:' + room;
+let room = null;
+let KEY = null;
+const newRoomCode = () => 'CRAFT-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 
 function freshState() {
   const templates = seedTemplates();
@@ -105,9 +105,8 @@ function freshState() {
     crew: [{ id: 'c-owner', name: 'Owner', role: 'owner' }],
   };
 }
-let S = JSON.parse(localStorage.getItem(KEY) || 'null') || freshState();
-if (!local.meId || !S.crew.some((c) => c.id === local.meId)) local.meId = S.crew[0].id;
-saveLocal();
+let S = null;
+let sync = null;
 
 function saveLocal() { localStorage.setItem('abfahrt:local', JSON.stringify(local)); }
 
@@ -139,6 +138,7 @@ function createSync(roomCode, onRemote) {
   // PartyKit WebSocket for real cross-device sync
   let ws = null;
   let retryTimer = null;
+  let closed = false;
   const chip = document.getElementById('roomChip');
 
   function setStatus(ok) {
@@ -146,6 +146,7 @@ function createSync(roomCode, onRemote) {
   }
 
   function connect() {
+    if (closed) return;
     try {
       ws = new WebSocket(`${WS_PROTO}//${PARTYKIT_HOST}/party/${encodeURIComponent(roomCode)}`);
       ws.onopen = () => setStatus(true);
@@ -158,12 +159,12 @@ function createSync(roomCode, onRemote) {
       ws.onclose = () => {
         ws = null;
         setStatus(false);
-        retryTimer = setTimeout(connect, 3000);
+        if (!closed) retryTimer = setTimeout(connect, 3000);
       };
       ws.onerror = () => ws && ws.close();
     } catch {
       setStatus(false);
-      retryTimer = setTimeout(connect, 5000);
+      if (!closed) retryTimer = setTimeout(connect, 5000);
     }
   }
 
@@ -174,15 +175,60 @@ function createSync(roomCode, onRemote) {
       if (bc) bc.postMessage({ type: 'state', src: SRC, state });
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(state));
     },
+    close() {
+      closed = true;
+      clearTimeout(retryTimer);
+      if (bc) bc.close();
+      if (ws) ws.close();
+    },
   };
 }
-const sync = createSync(room, (remote) => { S = remote; localStorage.setItem(KEY, JSON.stringify(S)); render(); });
+/* Boot into a room: load (or seed) its state, open sync, pin the URL. */
+function bootRoom(code) {
+  if (sync) sync.close();
+  room = code;
+  KEY = 'abfahrt:' + room;
+  local.room = room;
+  S = JSON.parse(localStorage.getItem(KEY) || 'null') || freshState();
+  if (!local.meId || !S.crew.some((c) => c.id === local.meId)) local.meId = S.crew[0].id;
+  saveLocal();
+  sync = createSync(room, (remote) => {
+    S = remote;
+    localStorage.setItem(KEY, JSON.stringify(S));
+    recordTrip();
+    render();
+  });
+  if (location.protocol !== 'file:') history.replaceState(null, '', location.pathname + '?room=' + room);
+  lastP = progress();
+  prevRoadP = null;
+  recordTrip();
+  render();
+}
 
 function commit() {
   S.ts = Date.now();
   localStorage.setItem(KEY, JSON.stringify(S));
-  sync.send(S);
+  if (sync) sync.send(S);
+  recordTrip();
   render();
+}
+
+/* ---------- trip history (crafter_trips) ---------- */
+const loadTrips = () => JSON.parse(localStorage.getItem('crafter_trips') || '[]');
+const saveTrips = (t) => localStorage.setItem('crafter_trips', JSON.stringify(t));
+
+/* Upsert this room's logbook entry; completedAt mirrors departure unless overridden. */
+function recordTrip(extra = {}) {
+  if (!room || !S) return;
+  const trips = loadTrips();
+  let t = trips.find((x) => x.code === room);
+  if (!t) { t = { code: room, startedAt: Date.now() }; trips.push(t); }
+  t.name = S.trip.name;
+  t.template = tpl().type;
+  t.progress = Math.round(progress() * 100);
+  t.completedAt = S.trip.startedAt || null;
+  Object.assign(t, extra);
+  saveTrips(trips);
 }
 
 /* ---------- derived ---------- */
@@ -233,6 +279,50 @@ function sndEngine() {
     o.connect(f).connect(g).connect(a.destination);
     o.start(t); lfo.start(t); o.stop(t + dur); lfo.stop(t + dur);
   } catch { /* audio unavailable */ }
+}
+
+/* ---------- ambient loop (landing hero: engine idle + wind) ---------- */
+let ambient = null;
+function startAmbient() {
+  if (ambient) return;
+  try {
+    const a = ac(), t = a.currentTime;
+    const master = a.createGain();
+    master.gain.setValueAtTime(0, t);
+    master.gain.linearRampToValueAtTime(0.16, t + 1.4);
+    master.connect(a.destination);
+    // engine at idle: low sawtooth with a slow rpm wobble
+    const o = a.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 44;
+    const wob = a.createOscillator(); wob.frequency.value = 7.5;
+    const wg = a.createGain(); wg.gain.value = 3.5;
+    wob.connect(wg).connect(o.frequency);
+    const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 150;
+    const og = a.createGain(); og.gain.value = 0.5;
+    o.connect(f).connect(og).connect(master);
+    // wind: looped noise through a slowly swaying bandpass
+    const len = a.sampleRate * 2;
+    const buf = a.createBuffer(1, len, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const n = a.createBufferSource(); n.buffer = buf; n.loop = true;
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 320; bp.Q.value = 0.6;
+    const sway = a.createOscillator(); sway.frequency.value = 0.13;
+    const sg = a.createGain(); sg.gain.value = 140;
+    sway.connect(sg).connect(bp.frequency);
+    const ng = a.createGain(); ng.gain.value = 0.22;
+    n.connect(bp).connect(ng).connect(master);
+    o.start(); wob.start(); n.start(); sway.start();
+    ambient = { master, stops: [o, wob, n, sway] };
+  } catch { ambient = null; }
+}
+function stopAmbient() {
+  if (!ambient) return;
+  const amb = ambient;
+  ambient = null;
+  try {
+    amb.master.gain.linearRampToValueAtTime(0, ac().currentTime + 0.4);
+  } catch { /* already gone */ }
+  setTimeout(() => amb.stops.forEach((x) => { try { x.stop(); } catch {} }), 500);
 }
 
 /* ============================================================
@@ -441,7 +531,7 @@ function sceneSVG(type) {
 let justStamped = null;
 let prevRoadP = null;
 let editingTpl = null;
-let lastP = progress();
+let lastP = 0;
 
 function vChecklist() {
   const t = tpl();
@@ -461,7 +551,7 @@ function vChecklist() {
         <button class="item ${ck ? 'done' : ''} ${justStamped === i.id ? 'fresh' : ''} ${canEdit() ? '' : 'locked'}"
           data-action="toggle" data-id="${i.id}" ${canEdit() ? '' : 'disabled'}>
           <span class="box">${ck ? '<svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg>' : ''}</span>
-          <span class="item-label">${esc(i.label)}
+          <span class="item-label"><span class="item-text">${esc(i.label)}</span>
             ${ck ? `<span class="item-meta"><b>✓ ${esc(ck.by)}</b> · ${fmtTime(ck.at)}</span>` : ''}
           </span>
           ${ck ? `<span class="stamp" style="--r:${rot}deg">GEPRÜFT</span>` : ''}
@@ -479,7 +569,8 @@ function vChecklist() {
     </section>`;
   }).join('');
 
-  return `
+  const remaining = it.length - done;
+  return `<div class="cl ${remaining === 1 ? 'final-stretch' : ''}">
     <p class="kicker">${esc(S.van)} · Pre-departure</p>
     <h1 class="trip-title">${esc(S.trip.name)}</h1>
     <div class="trip-meta">
@@ -493,19 +584,19 @@ function vChecklist() {
         <button class="btn small" data-action="newTrip">New trip</button>
       </div>` : ''}
     <div class="road-head">
-      <span class="road-count">${done} of ${it.length} checked</span>
-      <span class="road-pct">${Math.round(p * 100)}%${p === 1 ? '<span class="ready">READY</span>' : ''}</span>
+      <span class="road-count">${remaining === 1 ? 'One latch to go.' : `${done} of ${it.length} checked`}</span>
+      <span class="road-pct ${justStamped ? 'pop' : ''}">${Math.round(p * 100)}%${p === 1 ? '<span class="ready">READY</span>' : ''}</span>
     </div>
     <div class="road">
       <div class="road-strip"></div>
       <div class="road-van">${vanSVG(t.type)}</div>
       <div class="road-goal">ZIEL</div>
     </div>
-    ${zones}`;
+    ${zones}</div>`;
 }
 
 function vTemplates() {
-  const cards = S.templates.map((t) => {
+  const cards = S.templates.map((t, ti) => {
     const n = t.zones.reduce((s, z) => s + z.items.length, 0);
     const active = t.id === S.trip.templateId;
     const editing = editingTpl === t.id;
@@ -539,7 +630,7 @@ function vTemplates() {
         </div>
       </div>` : '';
     return `<div class="card tpl-card">
-      <div class="tpl-thumb">${sceneSVG(t.type)}<span class="tpl-type">${esc(t.type)}</span></div>
+      <div class="tpl-thumb">${sceneSVG(t.type)}<span class="tpl-type">${esc(t.type)}</span><span class="tpl-no">DOSSIER ${String(ti + 1).padStart(2, '0')}</span></div>
       <div class="tpl-body">
         <div class="tpl-name">${esc(t.name)}${active ? '<span class="tpl-active-tag">ACTIVE</span>' : ''}</div>
         <div class="tpl-sub">${t.zones.length} zones · ${n} items</div>
@@ -563,11 +654,28 @@ function vTemplates() {
 
 function vCrew() {
   const my = me();
-  const rows = S.crew.map((c) => `
+  const total = allItems().length;
+  const counts = {};
+  for (const id in S.checked) {
+    const by = S.checked[id].by;
+    counts[by] = (counts[by] || 0) + 1;
+  }
+  const C = 2 * Math.PI * 20;
+  const rows = S.crew.map((c) => {
+    const n = counts[c.name] || 0;
+    const frac = total ? n / total : 0;
+    return `
     <div class="crew-row">
-      <span class="avatar">${esc(c.name.trim()[0] || '?').toUpperCase()}</span>
+      <span class="avatar-wrap">
+        <svg class="ring" viewBox="0 0 44 44" aria-hidden="true">
+          <circle class="ring-bg" cx="22" cy="22" r="20"/>
+          <circle class="ring-fg" cx="22" cy="22" r="20"
+            style="stroke-dasharray:${C.toFixed(1)}; stroke-dashoffset:${(C * (1 - frac)).toFixed(1)}"/>
+        </svg>
+        <span class="avatar">${esc(c.name.trim()[0] || '?').toUpperCase()}</span>
+      </span>
       <span class="crew-name">${esc(c.name)}
-        <span class="role-tag">${c.role}</span>
+        <span class="role-tag">${c.role} · ${n}/${total} checked</span>
       </span>
       ${isOwner() && c.role !== 'owner' ? `
         <select data-field="crewRole" data-id="${c.id}">
@@ -575,7 +683,8 @@ function vCrew() {
           <option value="view" ${c.role === 'view' ? 'selected' : ''}>View only</option>
         </select>
         <button class="iconbtn" data-action="rmCrew" data-id="${c.id}" title="Remove">×</button>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const link = location.origin === 'null'
     ? location.pathname + '?room=' + room
@@ -604,10 +713,10 @@ function vCrew() {
     </div>
     <div class="card">
       <h3>Invite link</h3>
-      <div class="invite-link">${esc(link)}</div>
+      <button class="invite-link" data-action="copyInvite" title="Tap to copy">${esc(link)}</button>
       <div class="btn-row">
         <button class="btn small" data-action="copyInvite">Copy link</button>
-        <span class="chip">Room ${esc(room)}</span>
+        <span class="chip amber">Trip code ${esc(room)}</span>
       </div>
       <p class="footnote">Sync runs over PartyKit WebSockets — changes appear on every device in real time. The dot in the header shows your connection status.</p>
     </div>`;
@@ -654,12 +763,20 @@ function vSettings() {
         <button class="btn amber" data-action="preview">Preview departure</button>
         <button class="btn danger" data-action="resetTrip">Reset checklist</button>
       </div>
+    </div>
+    <div class="card">
+      <h3>Archive</h3>
+      <p class="footnote">Stamps this trip complete, files it in the logbook on the landing page, and clears the checklist for the next run.</p>
+      <div class="btn-row">
+        <button class="btn danger" data-action="archiveTrip">Archive this trip</button>
+      </div>
     </div>`;
 }
 
 /* ---------- render ---------- */
 const VIEW = $('#view');
 function render() {
+  if (!S) return;
   document.documentElement.dataset.theme = local.theme;
   $('#roomChip').textContent = room;
   VIEW.innerHTML =
@@ -816,6 +933,39 @@ const actions = {
     D.hidden = true;
     document.body.classList.remove('scene-open');
   },
+  startTrip() { enterApp(newRoomCode()); },
+  joinTrip() {
+    const inp = $('#joinCode');
+    const code = (inp.value || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!code) {
+      inp.classList.remove('shake');
+      void inp.offsetWidth;
+      inp.classList.add('shake');
+      inp.focus();
+      return;
+    }
+    enterApp(code);
+  },
+  resumeTrip(d) { enterApp(d.code); },
+  toggleAmbient(d, el) {
+    if (ambient) {
+      stopAmbient();
+      el.textContent = 'Sound on';
+    } else {
+      startAmbient();
+      el.textContent = ambient ? 'Sound off' : 'Sound on';
+    }
+  },
+  archiveTrip() {
+    if (!confirm('Archive this trip? It moves to the logbook and the checklist resets.')) return;
+    recordTrip({ completedAt: Date.now() });
+    S.checked = {};
+    S.trip.startedAt = null;
+    S.ts = Date.now();
+    localStorage.setItem(KEY, JSON.stringify(S));
+    if (sync) sync.send(S);
+    exitToLanding();
+  },
 };
 
 const fields = {
@@ -897,6 +1047,150 @@ async function runDeparture(preview) {
 }
 
 /* ============================================================
+   LANDING
+   ============================================================ */
+const LAND = $('#landing');
+let landIO = null;
+let landScrollFn = null;
+
+/* One logbook postcard — completed trips are stamped memories, open ones glow. */
+function landTripCard(t, i) {
+  const done = !!t.completedAt;
+  const when = fmtDateTime(t.completedAt || t.startedAt || Date.now());
+  const rot = ((hash(t.code) % 5) - 2) * 0.6;
+  return `<button class="land-trip reveal ${done ? 'done' : ''}" data-action="resumeTrip"
+    data-code="${esc(t.code)}" style="--rot:${rot}deg; --d:${i * 70}ms">
+    <div class="lt-thumb">${sceneSVG(t.template || 'beach')}</div>
+    <div class="lt-body">
+      <span class="lt-name">${esc(t.name || 'Untitled Trip')}</span>
+      <span class="lt-meta">${esc(t.code)} · ${esc(when)}</span>
+      <div class="lt-bar"><i style="width:${t.progress || 0}%"></i></div>
+      ${done ? '<span class="lt-stamp">ABGEFAHREN</span>' : `<span class="lt-pct">${t.progress || 0}%</span>`}
+    </div>
+  </button>`;
+}
+
+function renderLanding() {
+  const trips = loadTrips().sort((a, b) => (b.completedAt || b.startedAt || 0) - (a.completedAt || a.startedAt || 0));
+  const heroType = (trips[0] && trips[0].template) || 'beach';
+  LAND.innerHTML = `<div class="land-wrap">
+    <div class="land-hero">
+      <div class="land-stage">
+        <div class="land-scene">${sceneSVG(heroType)}</div>
+        <div class="land-van" id="landVan">${vanSVG(heroType)}</div>
+        <div class="land-grain"></div>
+        <div class="land-head">
+          <p class="kicker">One van · one crew · one list</p>
+          <h1 class="land-brand">ABFAHRT<span>.</span></h1>
+          <p class="land-tag">The walkaround before every departure — shared live with everyone aboard The Crafter, until every latch is checked.</p>
+        </div>
+        <button class="land-sound" data-action="toggleAmbient">Sound on</button>
+        <div class="land-scrollhint">Roll on<span class="land-arrow">↓</span></div>
+      </div>
+    </div>
+    <section class="land-cta">
+      <p class="kicker reveal">Ready up</p>
+      <h2 class="land-h2 reveal" style="--d:60ms">Wohin geht's?</h2>
+      <div class="land-cards">
+        <div class="card land-card reveal" style="--d:120ms">
+          <h3>New trip</h3>
+          <p>Fresh checklist, fresh code — share it with whoever rides along.</p>
+          <button class="btn amber" data-action="startTrip">Start a trip</button>
+        </div>
+        <div class="card land-card reveal" style="--d:200ms">
+          <h3>Join with a code</h3>
+          <p>Someone already started the list? Hop on with the trip code.</p>
+          <div class="land-join">
+            <input id="joinCode" type="text" placeholder="CRAFT-XXXX" maxlength="14"
+              autocapitalize="characters" autocomplete="off" spellcheck="false">
+            <button class="btn" data-action="joinTrip">Join</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="land-trips">
+      <p class="kicker reveal">Logbook</p>
+      <h2 class="land-h2 reveal" style="--d:60ms">Your trips</h2>
+      ${trips.length
+        ? `<div class="land-tripgrid">${trips.map(landTripCard).join('')}</div>`
+        : '<p class="empty-note reveal" style="--d:120ms">No trips yet — the logbook fills itself once you roll out.</p>'}
+    </section>
+    <footer class="land-foot reveal">
+      <span class="land-foot-brand">ABFAHRT<span>.</span></span>
+      <span>Built for The Crafter · checked is checked</span>
+    </footer>
+  </div>`;
+  initLandingFx();
+}
+
+/* Scroll mechanics: the van idles, creeps forward as you scroll, parks at the CTA.
+   Eased translateX + distance-true wheel rotation; far/mid layers drift slower. */
+function initLandingFx() {
+  if (landIO) landIO.disconnect();
+  landIO = new IntersectionObserver((entries) => {
+    entries.forEach((en) => {
+      if (en.isIntersecting) { en.target.classList.add('in'); landIO.unobserve(en.target); }
+    });
+  }, { threshold: 0.12 });
+  LAND.querySelectorAll('.reveal').forEach((el) => landIO.observe(el));
+
+  if (landScrollFn) { removeEventListener('scroll', landScrollFn); landScrollFn = null; }
+  if (reducedMotion) { LAND.classList.add('static'); return; }
+
+  const van = $('#landVan');
+  const far = LAND.querySelector('.land-scene .l-far');
+  const mid = LAND.querySelector('.land-scene .l-mid');
+  const hero = LAND.querySelector('.land-hero');
+  let raf = null;
+  landScrollFn = () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      if (!van.isConnected) return;
+      const range = Math.max(1, hero.offsetHeight - innerHeight);
+      const p = Math.min(1, Math.max(0, scrollY / range));
+      const eased = 1 - Math.pow(1 - p, 3);
+      const dx = eased * Math.min(innerWidth * 0.52, 620);
+      van.style.transform = `translateX(${dx}px)`;
+      van.classList.toggle('moving', p > 0.02 && p < 0.96);
+      van.querySelectorAll('.wheelspin').forEach((w) => { w.style.transform = `rotate(${dx * 3.2}deg)`; });
+      if (far) far.style.transform = `translateX(${-eased * 55}px)`;
+      if (mid) mid.style.transform = `translateX(${-eased * 150}px)`;
+    });
+  };
+  addEventListener('scroll', landScrollFn, { passive: true });
+  landScrollFn();
+}
+
+function showLanding() {
+  document.body.classList.add('landing');
+  LAND.hidden = false;
+  LAND.classList.remove('leave');
+  renderLanding();
+  scrollTo(0, 0);
+}
+
+/* Animated swap into the app: freeze the landing where it is, lift it out. */
+function enterApp(code) {
+  stopAmbient();
+  const wrap = LAND.querySelector('.land-wrap');
+  if (wrap) wrap.style.transform = `translateY(${-scrollY}px)`;
+  LAND.classList.add('leave');
+  if (landScrollFn) { removeEventListener('scroll', landScrollFn); landScrollFn = null; }
+  bootRoom(code);
+  document.body.classList.remove('landing');
+  scrollTo(0, 0);
+  setTimeout(() => { LAND.hidden = true; LAND.innerHTML = ''; }, 750);
+}
+
+function exitToLanding() {
+  if (location.protocol !== 'file:') history.replaceState(null, '', location.pathname);
+  local.room = null;
+  saveLocal();
+  showLanding();
+}
+
+/* ============================================================
    WIRING
    ============================================================ */
 function setTab(tab) { local.tab = tab; saveLocal(); render(); }
@@ -911,10 +1205,13 @@ document.body.addEventListener('change', (e) => {
   const f = e.target.closest('[data-field]');
   if (f && fields[f.dataset.field]) fields[f.dataset.field](f.value, f);
 });
+document.body.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.id === 'joinCode') actions.joinTrip();
+});
 
-// Keep the URL shareable: pin the room code into the address bar.
-if (!urlRoom && location.protocol !== 'file:') {
-  history.replaceState(null, '', location.pathname + '?room=' + room);
+// Invite links drop straight into the trip; everyone else gets the landing.
+if (urlRoom) {
+  bootRoom(urlRoom);
+} else {
+  showLanding();
 }
-
-render();
