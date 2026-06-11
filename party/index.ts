@@ -5,6 +5,10 @@ export default class ChecklistParty implements Party.Server {
 
   constructor(readonly room: Party.Room) {}
 
+  async onStart() {
+    this.state = (await this.room.storage.get<string>("state")) ?? null;
+  }
+
   onConnect(conn: Party.Connection) {
     if (this.state) conn.send(this.state);
   }
@@ -16,6 +20,7 @@ export default class ChecklistParty implements Party.Server {
       if (!current || incoming.ts > current.ts) {
         this.state = message;
         this.room.broadcast(message, [sender.id]);
+        void this.room.storage.put("state", message);
       }
     } catch {}
   }

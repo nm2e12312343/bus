@@ -39,7 +39,7 @@ html[data-theme='night'] {
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; background: var(--bg); }
 body {
   font-family: var(--body);
   font-size: 15px;
@@ -49,8 +49,13 @@ body {
   min-height: 100dvh;
 }
 body.scene-open { overflow: hidden; }
-button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
-input, select { font: inherit; color: var(--ink); }
+button {
+  font: inherit; color: inherit; background: none; border: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+/* 16px floor stops iOS Safari from zooming in on focus */
+input, select { font: inherit; font-size: 16px; color: var(--ink); }
+.item, .me-chip, .tab, .land-trip { -webkit-user-select: none; user-select: none; }
 svg { display: block; }
 
 /* ---------- top bar ---------- */
@@ -335,9 +340,9 @@ html[data-theme='night'] .stamp { mix-blend-mode: normal; }
 .tpl-editor { border-top: 1px dashed var(--line); margin-top: 14px; padding-top: 4px; }
 .tpl-zone { margin-top: 14px; padding: 12px; background: var(--card-2); border-radius: 9px; }
 .tpl-zone-head { display: flex; gap: 8px; align-items: center; }
-.tpl-zone-head input { flex: 1; background: transparent; border: none; border-bottom: 1.5px solid var(--line); padding: 4px 2px; font-family: var(--disp); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; }
+.tpl-zone-head input { flex: 1; background: transparent; border: none; border-bottom: 1.5px solid var(--line); padding: 4px 2px; font-family: var(--disp); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 16px; }
 .tpl-item-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-.tpl-item-row input { flex: 1; background: var(--card); border: 1.5px solid var(--line-soft); border-radius: 6px; padding: 7px 10px; font-size: 14px; }
+.tpl-item-row input { flex: 1; background: var(--card); border: 1.5px solid var(--line-soft); border-radius: 6px; padding: 7px 10px; font-size: 16px; }
 .iconbtn {
   width: 30px; height: 30px; flex: none; display: grid; place-items: center;
   border: 1.5px solid var(--line); border-radius: 6px; color: var(--faded);
@@ -367,7 +372,7 @@ html[data-theme='night'] .stamp { mix-blend-mode: normal; }
 html[data-theme='night'] .avatar { background: var(--birch); color: var(--deepwater); }
 .crew-name { flex: 1; font-weight: 600; }
 .crew-name .role-tag { display: block; font-family: var(--disp); font-weight: 700; font-size: 10px; letter-spacing: 0.2em; color: var(--faded); text-transform: uppercase; }
-.crew-row select { background: var(--card-2); border: 1.5px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+.crew-row select { background: var(--card-2); border: 1.5px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 16px; }
 .add-row { display: flex; gap: 8px; margin-top: 12px; }
 .add-row input { flex: 1; background: var(--card-2); border: 1.5px solid var(--line); border-radius: 7px; padding: 10px 12px; }
 .add-row select { background: var(--card-2); border: 1.5px solid var(--line); border-radius: 7px; padding: 0 8px; }
@@ -691,4 +696,21 @@ body.landing .topbar, body.landing .tabbar, body.landing #view { display: none; 
 
 @media (min-width: 640px) {
   .land-cards, .land-tripgrid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============================================================
+   IPHONE / TOUCH
+   ============================================================ */
+.topbar { padding-top: calc(14px + env(safe-area-inset-top)); }
+.land-head { top: calc(max(8vh, 64px) + env(safe-area-inset-top) * 0.6); }
+.land-sound { top: calc(max(4vh, 18px) + env(safe-area-inset-top)); }
+.land-scrollhint { bottom: calc(16px + env(safe-area-inset-bottom)); }
+#view { padding-bottom: calc(130px + env(safe-area-inset-bottom)); }
+
+/* touch devices: no sticky hover states */
+@media (hover: none) {
+  .roomchip:hover { border-color: var(--line); color: var(--faded); }
+  .iconbtn:hover { color: var(--faded); border-color: var(--line); }
+  .invite-link:hover { border-color: var(--line); color: var(--faded); }
+  .land-sound:hover { color: rgba(239, 233, 220, 0.75); border-color: rgba(239, 233, 220, 0.35); }
 }

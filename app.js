@@ -18,72 +18,13 @@ const fmtDateTime = (ts) =>
   new Date(ts).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ---------- seed data ---------- */
+/* ---------- template helpers ---------- */
 function zone(name, labels) {
   return { name, items: labels.map((label) => ({ id: uid(), label })) };
 }
-function seedTemplates() {
-  return [
-    {
-      id: 'tpl-beach', name: 'Beach Trip', type: 'beach',
-      zones: [
-        zone('Rig & Exterior', [
-          'Roof box latched', 'Boards strapped & padded', 'Awning locked',
-          'Tyre pressures checked (incl. spare)', 'Gas bottle valve closed', 'Bike rack lights plugged in',
-        ]),
-        zone('Cabin & Galley', [
-          'Drawers & lockers latched', 'Fridge latched · set to 4°', 'Hob gas off',
-          'Skylights & windows closed', 'Loose gear stowed',
-        ]),
-        zone('Systems', [
-          'Fresh water topped up', 'Grey water emptied', 'Leisure battery above 80%', 'Shore power unplugged',
-        ]),
-        zone('Docs & Crew', [
-          'Papers & insurance aboard', 'Ferry / site booking confirmed',
-          'Wallets · keys · phones', 'Offline maps downloaded', 'Sunscreen & beach bag',
-        ]),
-      ],
-    },
-    {
-      id: 'tpl-mountain', name: 'Mountain Trip', type: 'mountain',
-      zones: [
-        zone('Rig & Exterior', [
-          'Snow chains stowed', 'Levelling blocks aboard', 'Awning locked',
-          'Tyre pressures checked (incl. spare)', 'Gas bottle valve closed',
-        ]),
-        zone('Cabin & Galley', [
-          'Drawers & lockers latched', 'Fridge latched · set to 4°', 'Hob gas off',
-          'Skylights & windows closed', 'Down layers & boots packed',
-        ]),
-        zone('Systems', [
-          'Diesel topped up for the heater', 'Heater test run done', 'Water system frost-checked',
-          'Leisure battery above 80%', 'Shore power unplugged',
-        ]),
-        zone('Docs & Crew', [
-          'Papers & insurance aboard', 'Vignette / toll sorted', 'Wallets · keys · phones', 'Offline maps downloaded',
-        ]),
-      ],
-    },
-    {
-      id: 'tpl-city', name: 'City Weekend', type: 'city',
-      zones: [
-        zone('Rig & Exterior', [
-          'Bike rack locked', 'Awning locked', 'Gas bottle valve closed', 'Height clearance noted (2.7 m!)',
-        ]),
-        zone('Cabin & Galley', [
-          'Drawers & lockers latched', 'Fridge latched · set to 4°', 'Hob gas off',
-          'Valuables out of sight', 'Loose gear stowed',
-        ]),
-        zone('Systems', [
-          'Fresh water topped up', 'Grey water emptied', 'Leisure battery above 80%', 'Shore power unplugged',
-        ]),
-        zone('Docs & Crew', [
-          'Parking app set up', 'Dinner / museum bookings', 'Bike locks packed', 'Wallets · keys · phones',
-        ]),
-      ],
-    },
-  ];
-}
+/* Device-wide template library: built by hand, copied into every new trip. */
+const loadTemplatesLib = () => JSON.parse(localStorage.getItem('crafter_templates') || '[]');
+const saveTemplatesLib = () => localStorage.setItem('crafter_templates', JSON.stringify(S.templates));
 
 /* ---------- state ---------- */
 const urlRoom = new URLSearchParams(location.search).get('room');
@@ -95,11 +36,14 @@ let KEY = null;
 const newRoomCode = () => 'CRAFT-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 
 function freshState() {
-  const templates = seedTemplates();
+  // Copy the device library into the trip so the crew receives the templates via sync.
+  const templates = JSON.parse(JSON.stringify(loadTemplatesLib()));
   return {
-    v: 1, ts: Date.now(),
+    // ts: 0 — a fresh local state must always lose against the real room state,
+    // otherwise someone joining via code overwrites the owner's trip.
+    v: 1, ts: 0,
     van: 'The Crafter',
-    trip: { name: 'Baltic Coast Run', departAt: '', templateId: templates[0].id, startedAt: null },
+    trip: { name: 'Neue Tour', departAt: '', templateId: templates[0]?.id ?? null, startedAt: null },
     templates,
     checked: {},
     crew: [{ id: 'c-owner', name: 'Owner', role: 'owner' }],
@@ -213,6 +157,12 @@ function commit() {
   render();
 }
 
+/* Template mutations also mirror into the device library. */
+function commitTemplates() {
+  saveTemplatesLib();
+  commit();
+}
+
 /* ---------- trip history (crafter_trips) ---------- */
 const loadTrips = () => JSON.parse(localStorage.getItem('crafter_trips') || '[]');
 const saveTrips = (t) => localStorage.setItem('crafter_trips', JSON.stringify(t));
@@ -224,7 +174,7 @@ function recordTrip(extra = {}) {
   let t = trips.find((x) => x.code === room);
   if (!t) { t = { code: room, startedAt: Date.now() }; trips.push(t); }
   t.name = S.trip.name;
-  t.template = tpl().type;
+  t.template = tpl()?.type ?? null;
   t.progress = Math.round(progress() * 100);
   t.completedAt = S.trip.startedAt || null;
   Object.assign(t, extra);
@@ -232,8 +182,8 @@ function recordTrip(extra = {}) {
 }
 
 /* ---------- derived ---------- */
-const tpl = () => S.templates.find((t) => t.id === S.trip.templateId) || S.templates[0];
-const allItems = () => tpl().zones.flatMap((z) => z.items);
+const tpl = () => S.templates.find((t) => t.id === S.trip.templateId) || S.templates[0] || null;
+const allItems = () => { const t = tpl(); return t ? t.zones.flatMap((z) => z.items) : []; };
 const progress = () => {
   const it = allItems();
   if (!it.length) return 0;
@@ -535,6 +485,16 @@ let lastP = 0;
 
 function vChecklist() {
   const t = tpl();
+  if (!t) {
+    return `
+    <p class="kicker">${esc(S.van)} · Pre-departure</p>
+    <h1 class="trip-title">${esc(S.trip.name)}</h1>
+    <div class="card">
+      <h3>Noch kein Template</h3>
+      <p class="footnote">Leg im Templates-Tab deine erste Checkliste an — sie wird auf diesem Gerät gespeichert und steht in jeder neuen Tour zur Verfügung.</p>
+      <div class="btn-row"><button class="btn amber" data-action="gotoTemplates">Templates öffnen</button></div>
+    </div>`;
+  }
   const it = allItems();
   const done = it.filter((i) => S.checked[i.id]).length;
   const p = it.length ? done / it.length : 0;
@@ -626,7 +586,7 @@ function vTemplates() {
           </div>`).join('')}
         <div class="btn-row">
           <button class="btn ghost small" data-action="addZone" data-tpl="${t.id}">+ Zone</button>
-          <button class="btn danger small" data-action="rmTpl" data-tpl="${t.id}" ${active || S.templates.length < 2 ? 'disabled' : ''}>Delete</button>
+          <button class="btn danger small" data-action="rmTpl" data-tpl="${t.id}" ${active ? 'disabled' : ''}>Delete</button>
         </div>
       </div>` : '';
     return `<div class="card tpl-card">
@@ -636,8 +596,8 @@ function vTemplates() {
         <div class="tpl-sub">${t.zones.length} zones · ${n} items</div>
         <div class="btn-row">
           ${active ? '' : `<button class="btn amber small" data-action="useTpl" data-tpl="${t.id}">Use for this trip</button>`}
-          ${isOwner() ? `<button class="btn ghost small" data-action="toggleEdit" data-tpl="${t.id}">${editing ? 'Done' : 'Edit'}</button>
-          <button class="btn ghost small" data-action="dupTpl" data-tpl="${t.id}">Duplicate</button>` : ''}
+          <button class="btn ghost small" data-action="toggleEdit" data-tpl="${t.id}">${editing ? 'Done' : 'Edit'}</button>
+          <button class="btn ghost small" data-action="dupTpl" data-tpl="${t.id}">Duplicate</button>
         </div>
         ${editor}
       </div>
@@ -647,9 +607,8 @@ function vTemplates() {
   return `
     <p class="kicker">Trip presets</p>
     <h1 class="trip-title">Templates</h1>
-    ${isOwner() ? '' : '<p class="footnote">Only the owner edits templates — you can pick one for the trip.</p>'}
-    ${cards}
-    ${isOwner() ? '<div class="btn-row"><button class="btn" data-action="newTpl">+ New template</button></div>' : ''}`;
+    ${cards || '<p class="empty-note">Noch keine Templates — leg unten dein erstes an. Es wird auf diesem Gerät gespeichert und in jede neue Tour übernommen.</p>'}
+    <div class="btn-row"><button class="btn" data-action="newTpl">+ New template</button></div>`;
 }
 
 function vCrew() {
@@ -839,12 +798,14 @@ const actions = {
     commit();
     setTab('checklist');
   },
+  gotoTemplates() { setTab('templates'); },
   toggleEdit(d) { editingTpl = editingTpl === d.tpl ? null : d.tpl; render(); },
   newTpl() {
     const t = { id: uid(), name: 'New Template', type: 'beach', zones: [zone('Zone 1', [])] };
     S.templates.push(t);
+    if (!S.trip.templateId) S.trip.templateId = t.id;
     editingTpl = t.id;
-    commit();
+    commitTemplates();
   },
   dupTpl(d) {
     const src = S.templates.find((t) => t.id === d.tpl);
@@ -854,36 +815,36 @@ const actions = {
     copy.name = src.name + ' Copy';
     copy.zones.forEach((z) => z.items.forEach((i) => { i.id = uid(); }));
     S.templates.push(copy);
-    commit();
+    commitTemplates();
   },
   rmTpl(d) {
-    if (d.tpl === S.trip.templateId || S.templates.length < 2) return;
+    if (d.tpl === S.trip.templateId) return;
     if (!confirm('Delete this template?')) return;
     S.templates = S.templates.filter((t) => t.id !== d.tpl);
     editingTpl = null;
-    commit();
+    commitTemplates();
   },
   addZone(d) {
     const t = S.templates.find((x) => x.id === d.tpl);
     t.zones.push(zone('New zone', []));
-    commit();
+    commitTemplates();
   },
   rmZone(d) {
     const t = S.templates.find((x) => x.id === d.tpl);
     if (!confirm('Remove this zone and its items?')) return;
     t.zones.splice(+d.z, 1);
-    commit();
+    commitTemplates();
   },
   addItem(d) {
     const t = S.templates.find((x) => x.id === d.tpl);
     t.zones[+d.z].items.push({ id: uid(), label: 'New item' });
-    commit();
+    commitTemplates();
   },
   rmItem(d) {
     const t = S.templates.find((x) => x.id === d.tpl);
     const item = t.zones[+d.z].items.splice(+d.i, 1)[0];
     if (item) delete S.checked[item.id];
-    commit();
+    commitTemplates();
   },
   setMe(d) { local.meId = d.id; saveLocal(); render(); },
   addCrew() {
@@ -977,22 +938,22 @@ const fields = {
   tplName(v, el) {
     const t = S.templates.find((x) => x.id === el.dataset.tpl);
     t.name = v.trim() || 'Untitled';
-    commit();
+    commitTemplates();
   },
   tplType(v, el) {
     const t = S.templates.find((x) => x.id === el.dataset.tpl);
     t.type = v;
-    commit();
+    commitTemplates();
   },
   zoneName(v, el) {
     const t = S.templates.find((x) => x.id === el.dataset.tpl);
     t.zones[+el.dataset.z].name = v.trim() || 'Zone';
-    commit();
+    commitTemplates();
   },
   itemLabel(v, el) {
     const t = S.templates.find((x) => x.id === el.dataset.tpl);
     t.zones[+el.dataset.z].items[+el.dataset.i].label = v.trim() || 'Item';
-    commit();
+    commitTemplates();
   },
   crewRole(v, el) {
     const c = S.crew.find((x) => x.id === el.dataset.id);
@@ -1006,7 +967,7 @@ const fields = {
    ============================================================ */
 async function runDeparture(preview) {
   const D = $('#departure');
-  const type = tpl().type;
+  const type = tpl()?.type || 'beach';
   const seq = D.dataset.seq = uid(); // cancels stale async runs if reopened
 
   $('#sceneMount').innerHTML = sceneSVG(type) + `<div class="dep-van${reducedMotion ? ' stay' : ''}">${vanSVG(type)}</div>`;
