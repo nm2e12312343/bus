@@ -112,11 +112,19 @@ saveLocal();
 function saveLocal() { localStorage.setItem('abfahrt:local', JSON.stringify(local)); }
 
 /* ---------- sync adapter ----------
-   Prototype transport: BroadcastChannel (same browser, cross-tab) with a
-   localStorage `storage`-event fallback. Replace `createSync` with a
-   WebSocket implementation later — same interface: send(state) + onRemote. */
+   Primary: PartyKit WebSocket — real cross-device sync.
+   Fallback: BroadcastChannel for same-browser tab sync when WS is offline. */
+const PARTYKIT_HOST = (() => {
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '') return 'localhost:1999';
+  return 'abfahrt.nm2e12312343.partykit.dev';
+})();
+const WS_PROTO = PARTYKIT_HOST.startsWith('localhost') ? 'ws:' : 'wss:';
+
 function createSync(roomCode, onRemote) {
   const SRC = uid();
+
+  // BroadcastChannel keeps same-browser tabs in sync instantly
   const bc = 'BroadcastChannel' in self ? new BroadcastChannel('abfahrt:' + roomCode) : null;
   if (bc) {
     bc.onmessage = (e) => {
@@ -127,14 +135,45 @@ function createSync(roomCode, onRemote) {
     };
     bc.postMessage({ type: 'hello', src: SRC });
   }
-  addEventListener('storage', (e) => {
-    if (e.key === KEY && e.newValue) {
-      const n = JSON.parse(e.newValue);
-      if (n.ts > S.ts) onRemote(n);
+
+  // PartyKit WebSocket for real cross-device sync
+  let ws = null;
+  let retryTimer = null;
+  const chip = document.getElementById('roomChip');
+
+  function setStatus(ok) {
+    if (chip) chip.dataset.wsOk = ok ? '1' : '0';
+  }
+
+  function connect() {
+    try {
+      ws = new WebSocket(`${WS_PROTO}//${PARTYKIT_HOST}/party/${encodeURIComponent(roomCode)}`);
+      ws.onopen = () => setStatus(true);
+      ws.onmessage = (e) => {
+        try {
+          const incoming = JSON.parse(e.data);
+          if (incoming.ts > S.ts) onRemote(incoming);
+        } catch {}
+      };
+      ws.onclose = () => {
+        ws = null;
+        setStatus(false);
+        retryTimer = setTimeout(connect, 3000);
+      };
+      ws.onerror = () => ws && ws.close();
+    } catch {
+      setStatus(false);
+      retryTimer = setTimeout(connect, 5000);
     }
-  });
+  }
+
+  connect();
+
   return {
-    send(state) { if (bc) bc.postMessage({ type: 'state', src: SRC, state }); },
+    send(state) {
+      if (bc) bc.postMessage({ type: 'state', src: SRC, state });
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(state));
+    },
   };
 }
 const sync = createSync(room, (remote) => { S = remote; localStorage.setItem(KEY, JSON.stringify(S)); render(); });
@@ -570,7 +609,7 @@ function vCrew() {
         <button class="btn small" data-action="copyInvite">Copy link</button>
         <span class="chip">Room ${esc(room)}</span>
       </div>
-      <p class="footnote">Prototype sync runs over BroadcastChannel — it reaches other tabs of <em>this</em> browser. The sync adapter is built to swap in a WebSocket backend for real cross-device sharing.</p>
+      <p class="footnote">Sync runs over PartyKit WebSockets — changes appear on every device in real time. The dot in the header shows your connection status.</p>
     </div>`;
 }
 

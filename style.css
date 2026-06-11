@@ -75,6 +75,15 @@ svg { display: block; }
   transition: border-color 0.2s, color 0.2s;
 }
 .roomchip:hover { border-color: var(--signal); color: var(--signal); }
+.roomchip::before {
+  content: '';
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; margin-right: 6px; margin-bottom: 1px;
+  background: var(--faded);
+  transition: background 0.3s;
+}
+.roomchip[data-ws-ok="1"]::before { background: #4caf50; }
+.roomchip[data-ws-ok="0"]::before { background: #e53935; }
 
 /* ---------- layout ---------- */
 #view { padding: 18px 18px 130px; max-width: 720px; margin: 0 auto; animation: viewin 0.35s ease both; }

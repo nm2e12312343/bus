@@ -1,0 +1,5 @@
+{
+  "name": "abfahrt",
+  "main": "party/index.ts",
+  "compatibilityDate": "2026-06-11"
+}
