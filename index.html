@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="day">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#16323C" />
+  <title>ABFAHRT. — Pre-departure for The Crafter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700;800&family=Saira:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,16,400;1,16,400;1,16,500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">ABFAHRT<span class="brand-dot">.</span></div>
+    <button class="roomchip" id="roomChip" data-action="copyInvite" title="Copy invite link">····</button>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav class="tabbar" id="tabbar" aria-label="Sections">
+    <button data-tab="checklist" class="tab" aria-label="Checklist">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 9l2.5 2.5L15 7"/><path d="M8 15h8"/></svg>
+      <span>Checklist</span>
+    </button>
+    <button data-tab="templates" class="tab" aria-label="Templates">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-9 4 6 2.5-3.5L21 17z"/><path d="M3 21h18"/><circle cx="16.5" cy="6.5" r="1.6"/></svg>
+      <span>Templates</span>
+    </button>
+    <button data-tab="crew" class="tab" aria-label="Crew">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.4"/><path d="M16 14.4c2.3.2 4 1.8 4.5 4.6"/></svg>
+      <span>Crew</span>
+    </button>
+    <button data-tab="settings" class="tab" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 12h2M10 12h10M4 17h12M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <div id="departure" class="departure" hidden>
+    <div class="scene" id="sceneMount"></div>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="dep-card-wrap">
+      <div class="dep-card" id="depCard"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
