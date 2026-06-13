@@ -528,6 +528,270 @@ html[data-theme='night'] .tabbar { background: #0a1a20; border: 1px solid var(--
 .dep-bless { font-family: var(--serif); font-style: italic; font-size: 20px; color: var(--brake); margin-top: 14px; }
 .dep-card .btn { margin-top: 18px; }
 
+/* ============================================================
+   DIRECTOR'S CUT — atmosphere · post-fx · micro-interactions
+   ============================================================ */
+
+/* --- new parallax layers (depth for the weather + sky) --- */
+.l-sky, .l-cloud, .l-weather { will-change: transform; }
+.departure.rolling .l-sky     { animation: drift 3.6s cubic-bezier(0.55,0,0.85,0.55) forwards; --dx: -55px; }
+.departure.rolling .l-cloud   { animation: drift 3.6s cubic-bezier(0.55,0,0.85,0.55) forwards; --dx: -240px; }
+.departure.rolling .l-weather { animation: drift 3.6s cubic-bezier(0.55,0,0.85,0.55) forwards; --dx: -820px; }
+.departure.arrived .l-sky     { transform: translateX(-55px); }
+.departure.arrived .l-cloud   { transform: translateX(-240px); }
+.departure.arrived .l-weather { transform: translateX(-820px); }
+
+/* --- drifting clouds --- */
+.atmo-cloud { animation: atmoCloud var(--dur, 90s) linear var(--delay, 0s) infinite; will-change: transform; }
+@keyframes atmoCloud { from { transform: translateX(-480px); } to { transform: translateX(2080px); } }
+
+/* --- twinkling stars (opacity only — keeps them pinned) --- */
+.atmo-star { opacity: 0.85; animation: atmoTwinkle var(--dur, 3s) ease-in-out var(--delay, 0s) infinite; }
+@keyframes atmoTwinkle { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.22; } }
+
+/* --- snow / embers / motes (one keyframe via --y0/--y1) --- */
+.atmo-snow, .atmo-ember, .atmo-mote { animation: atmoFall var(--dur, 9s) linear var(--delay, 0s) infinite; will-change: transform, opacity; }
+@keyframes atmoFall {
+  0%   { transform: translate(var(--sx, 0), var(--y0, -40px)); opacity: 0; }
+  10%  { opacity: var(--op, 0.7); }
+  88%  { opacity: var(--op, 0.7); }
+  100% { transform: translate(calc(var(--sx, 0) + var(--drift, 0px)), var(--y1, 1300px)); opacity: 0; }
+}
+
+/* --- gliding birds with flapping wings --- */
+.atmo-birds { animation: atmoBirdsFly var(--dur, 46s) linear var(--delay, 0s) infinite; }
+@keyframes atmoBirdsFly { from { transform: translateX(-300px); } to { transform: translateX(1900px); } }
+.atmo-wing { transform-box: fill-box; transform-origin: center; animation: atmoFlap 0.5s ease-in-out infinite; }
+@keyframes atmoFlap { 50% { transform: scaleY(0.4); } }
+
+/* --- shooting star --- */
+.atmo-shoot { opacity: 0; animation: atmoShoot var(--dur, 9s) ease-in var(--delay, 0s) infinite; }
+@keyframes atmoShoot {
+  0%, 85% { opacity: 0; transform: translate(0, 0); }
+  88% { opacity: 1; }
+  100% { opacity: 0; transform: translate(300px, 150px); }
+}
+
+/* --- aurora ribbon --- */
+.atmo-aurora { transform-box: fill-box; transform-origin: center; animation: atmoAurora 14s ease-in-out infinite; }
+@keyframes atmoAurora {
+  0%, 100% { opacity: 0.5; transform: translateX(-30px) skewX(-4deg); }
+  50% { opacity: 0.9; transform: translateX(40px) skewX(5deg); }
+}
+
+/* --- celestial glows --- */
+.atmo-moonhalo { transform-box: fill-box; transform-origin: center; opacity: 0.14; animation: atmoHalo 6s ease-in-out infinite; }
+@keyframes atmoHalo { 50% { opacity: 0.26; transform: scale(1.12); } }
+.atmo-rays { transform-box: fill-box; transform-origin: center; opacity: 0.14; animation: atmoRays 60s linear infinite; }
+@keyframes atmoRays { to { transform: rotate(360deg); } }
+.atmo-sun-glow { transform-box: fill-box; transform-origin: center; opacity: 0.18; animation: atmoGlow 5s ease-in-out infinite; }
+@keyframes atmoGlow { 50% { opacity: 0.34; transform: scale(1.1); } }
+
+/* --- city: flickering windows, pulsing lamps, crossing aircraft --- */
+.atmo-window { opacity: 0.2; animation: atmoWindow var(--dur, 4s) steps(1) var(--delay, 0s) infinite; }
+@keyframes atmoWindow { 0%, 100% { opacity: 0.15; } 30% { opacity: 0.9; } 55% { opacity: 0.35; } 80% { opacity: 0.8; } }
+.atmo-lamp { opacity: 0.1; animation: atmoLamp 4s ease-in-out var(--delay, 0s) infinite; }
+@keyframes atmoLamp { 50% { opacity: 0.26; } }
+.atmo-plane { animation: atmoPlane var(--dur, 26s) linear var(--delay, 0s) infinite; }
+@keyframes atmoPlane { from { transform: translateX(-80px); } to { transform: translateX(1720px); } }
+.atmo-plane circle { animation: atmoBlink 1.3s steps(2, jump-none) infinite; }
+@keyframes atmoBlink { 50% { opacity: 0.2; } }
+
+/* --- beach: water shimmer --- */
+.atmo-shimmer { transform-box: fill-box; transform-origin: left center; opacity: 0; animation: atmoShimmer var(--dur, 3s) ease-in-out var(--delay, 0s) infinite; }
+@keyframes atmoShimmer { 0%, 100% { opacity: 0; transform: scaleX(0.4); } 50% { opacity: 0.7; transform: scaleX(1); } }
+
+/* --- van: headlight dust, paint sheen, tail glow, wheel dust, suspension bob --- */
+.beam-mote circle { transform-box: fill-box; transform-origin: center; animation: beamMote 2.6s ease-in-out infinite; }
+.beam-mote circle:nth-child(odd) { animation-delay: 0.7s; }
+.beam-mote circle:nth-child(3n) { animation-delay: 1.3s; }
+@keyframes beamMote { 0%, 100% { opacity: 0.2; transform: translate(0, 0); } 50% { opacity: 0.8; transform: translate(6px, -5px); } }
+.van-sheen { opacity: 0; animation: vanSheen 7s ease-in-out infinite; }
+.van-sheen rect { fill: #fff; }
+@keyframes vanSheen {
+  0% { opacity: 0; transform: translateX(0); }
+  8% { opacity: 0.32; }
+  18% { opacity: 0.32; transform: translateX(540px); }
+  27% { opacity: 0; transform: translateX(620px); }
+  100% { opacity: 0; transform: translateX(620px); }
+}
+.taillight { transform-box: fill-box; transform-origin: center; opacity: 0.22; animation: tailGlow 3.4s ease-in-out infinite; }
+@keyframes tailGlow { 50% { opacity: 0.46; } }
+.wheel-dust circle { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.departure.rolling .wheel-dust circle,
+.land-van.moving .wheel-dust circle,
+.road-van.driving .wheel-dust circle { animation: wheelDust 0.7s ease-out var(--dd, 0s) infinite; }
+@keyframes wheelDust {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  20% { opacity: 0.5; }
+  100% { opacity: 0; transform: translate(-46px, -14px) scale(1.8); }
+}
+.departure.rolling .van-rig,
+.land-van.moving .van-rig,
+.road-van.driving .van-rig { animation: vanBob 0.5s ease-in-out infinite; }
+@keyframes vanBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+.road-van.driving .wheelspin { animation: wheelspin 0.42s linear infinite; }
+
+/* --- departure cinematic: clearance flash, bloom, speed lines, whoosh, vignette, ink splat --- */
+.dep-clear { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none; opacity: 0; padding: 24px; }
+.dep-clear span {
+  font-family: var(--disp); font-weight: 800; font-size: clamp(18px, 5.5vw, 42px);
+  letter-spacing: 0.26em; text-transform: uppercase; color: var(--enamel);
+  border: 2.5px solid var(--signal); border-radius: 6px; padding: 13px 22px 10px;
+  background: rgba(10, 26, 32, 0.4); backdrop-filter: blur(3px); text-align: center;
+}
+.departure.open .dep-clear { animation: depClear 1.25s ease-out both; }
+@keyframes depClear {
+  0% { opacity: 0; transform: scale(1.35); }
+  16% { opacity: 1; transform: scale(1); }
+  68% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.95); }
+}
+.dep-flash {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0;
+  background: radial-gradient(42vmax 42vmax at 80% 60%, rgba(255, 247, 223, 0.9), transparent 60%);
+}
+.departure.ignition .dep-flash { animation: flashFlicker 1.9s steps(1) both; }
+@keyframes flashFlicker {
+  0% { opacity: 0; } 14% { opacity: 0.5; } 20% { opacity: 0.05; } 30% { opacity: 0.6; }
+  44% { opacity: 0.1; } 60% { opacity: 0.4; } 100% { opacity: 0.18; }
+}
+.departure.rolling .dep-flash { animation: flashPop 0.7s ease-out both; }
+@keyframes flashPop { 0% { opacity: 0.7; } 100% { opacity: 0; } }
+.dep-speedlines { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; opacity: 0; }
+.departure.rolling .dep-speedlines { opacity: 1; }
+.dep-speedlines i {
+  position: absolute; top: var(--y); right: -12vw; height: 2px; width: var(--len, 40vw);
+  border-radius: 2px; background: linear-gradient(90deg, transparent, rgba(255, 243, 210, 0.9)); opacity: 0;
+}
+.departure.rolling .dep-speedlines i { animation: speedLine 0.5s linear var(--d, 0s) infinite; }
+@keyframes speedLine {
+  0% { opacity: 0; transform: translateX(0); }
+  10% { opacity: var(--o, 0.5); }
+  100% { opacity: 0; transform: translateX(-132vw); }
+}
+.dep-whoosh { position: absolute; bottom: 17%; left: 0; z-index: 2; pointer-events: none; opacity: 0; }
+.km-sign {
+  display: inline-block; font-family: var(--disp); font-weight: 800; font-size: clamp(16px, 4vw, 30px);
+  letter-spacing: 0.1em; color: var(--deepwater); background: var(--signal);
+  padding: 8px 14px 6px; border-radius: 4px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.departure.rolling .dep-whoosh { animation: whoosh 1.15s cubic-bezier(0.5, 0, 0.7, 1) 1.2s 1 both; }
+@keyframes whoosh {
+  0% { opacity: 0; transform: translateX(116vw) scale(1.2); }
+  22% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-42vw) scale(0.7); }
+}
+.dep-vignette {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: radial-gradient(120% 92% at 50% 46%, transparent 56%, rgba(6, 16, 20, 0.52));
+}
+.dep-stamp { position: relative; }
+.dep-splatter {
+  position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--brake); color: var(--brake); opacity: 0;
+  box-shadow: -34px -12px 0 -1px, 30px -18px 0 0, 40px 8px 0 -1px, -28px 16px 0 0,
+    14px 26px 0 -1px, -42px 2px 0 -2px, 24px -28px 0 -2px, -16px -26px 0 -1px;
+}
+.departure.arrived .dep-splatter { animation: splat 0.5s 0.25s ease-out both; }
+@keyframes splat {
+  0% { opacity: 0; transform: scale(0); }
+  60% { opacity: 0.9; }
+  100% { opacity: 0.55; transform: scale(1); }
+}
+
+/* --- landing: parallax wrapper, sky grade, vignette, light leak --- */
+.land-parallax { position: absolute; inset: 0; will-change: transform; }
+.land-skygrade {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; mix-blend-mode: soft-light;
+  background: linear-gradient(180deg, rgba(255, 120, 40, 0) 30%, rgba(255, 90, 30, 0.4) 74%, rgba(120, 30, 40, 0.45));
+}
+.land-vignette {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: radial-gradient(116% 82% at 50% 40%, transparent 58%, rgba(6, 16, 20, 0.48));
+}
+.land-leak {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none; mix-blend-mode: screen;
+  background: radial-gradient(58vmax 30vmax at 88% 6%, rgba(255, 165, 70, 0.22), transparent 60%);
+  animation: leakDrift 12s ease-in-out infinite;
+}
+@keyframes leakDrift { 0%, 100% { opacity: 0.35; transform: translate(0, 0); } 50% { opacity: 0.6; transform: translate(-3%, 2%); } }
+
+/* --- landing: odometer HUD --- */
+.land-odo {
+  position: absolute; z-index: 4; right: 5vw; bottom: calc(60px + env(safe-area-inset-bottom));
+  display: flex; align-items: baseline; gap: 6px; color: rgba(239, 233, 220, 0.92);
+  background: rgba(10, 26, 32, 0.4); border: 1px solid rgba(239, 233, 220, 0.2);
+  border-radius: 8px; padding: 7px 11px 6px; backdrop-filter: blur(6px);
+}
+.land-odo-key { font-family: var(--disp); font-weight: 700; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7; }
+.land-odo-val { font-family: var(--disp); font-weight: 800; font-size: 19px; letter-spacing: 0.05em; font-variant-numeric: tabular-nums; }
+.land-odo-unit { font-family: var(--disp); font-weight: 700; font-size: 10px; letter-spacing: 0.12em; opacity: 0.7; }
+
+/* --- landing: EQ sound toggle --- */
+.land-sound { display: inline-flex; align-items: center; gap: 8px; }
+.land-sound .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.land-sound .eq i { width: 2.5px; height: 4px; background: currentColor; border-radius: 1px; opacity: 0.55; }
+.land-sound.playing .eq i { opacity: 1; animation: eqBar 0.9s ease-in-out infinite; }
+.land-sound.playing .eq i:nth-child(2) { animation-delay: 0.18s; }
+.land-sound.playing .eq i:nth-child(3) { animation-delay: 0.36s; }
+.land-sound.playing .eq i:nth-child(4) { animation-delay: 0.12s; }
+@keyframes eqBar { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+
+/* --- landing: brand bloom + pulsing indicator dot --- */
+.land-brand { animation: brandIn 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; text-shadow: 0 3px 32px rgba(0, 0, 0, 0.35); }
+@keyframes brandIn {
+  0% { opacity: 0; transform: translateY(20px) skewX(-6deg); letter-spacing: 0.16em; }
+  100% { opacity: 1; transform: none; }
+}
+.land-brand span { text-shadow: 0 0 20px rgba(255, 160, 25, 0.7); animation: dotPulse 1.8s ease-in-out 1s infinite; }
+.brand-dot { animation: dotPulse 2s ease-in-out infinite; }
+@keyframes dotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* --- tap FX overlay (ripple + ink splatter) --- */
+.fx-layer { position: fixed; inset: 0; z-index: 70; pointer-events: none; overflow: hidden; }
+.fx-ripple {
+  position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  border: 2px solid var(--signal); opacity: 0.85; animation: fxRipple 0.6s ease-out forwards;
+}
+@keyframes fxRipple { to { transform: scale(7); opacity: 0; } }
+.fx-ink {
+  position: absolute; width: var(--sz, 4px); height: var(--sz, 4px); margin: -2px 0 0 -2px;
+  border-radius: 50%; background: var(--signal); animation: fxInk 0.7s ease-out forwards;
+}
+@keyframes fxInk {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx, 0), var(--dy, 0)) scale(0.3); opacity: 0; }
+}
+
+/* --- tab bar: sliding indicator + active icon pop --- */
+.tab-ind {
+  position: absolute; top: 8px; bottom: 8px; left: 6px; width: calc((100% - 12px) / 4);
+  transform: translateX(calc(var(--ti, 0) * 100%));
+  transition: transform 0.36s cubic-bezier(0.34, 1.4, 0.5, 1);
+  background: rgba(255, 160, 25, 0.16); border: 1px solid rgba(255, 160, 25, 0.42);
+  border-radius: 11px; z-index: 0; pointer-events: none;
+}
+.tab { position: relative; z-index: 1; }
+.tab.active svg { animation: tabPop 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); }
+@keyframes tabPop { 0% { transform: translateY(0); } 40% { transform: translateY(-4px) scale(1.12); } 100% { transform: none; } }
+
+/* --- live connection dot pulse --- */
+.roomchip[data-ws-ok="1"]::before { animation: wsPulse 2s ease-out infinite; }
+@keyframes wsPulse {
+  0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.5); }
+  100% { box-shadow: 0 0 0 7px rgba(76, 175, 80, 0); }
+}
+
+/* --- global polish: selection, scrollbar, focus --- */
+::selection { background: var(--signal); color: var(--deepwater); }
+html { scrollbar-color: var(--signal) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--signal) 65%, var(--ink)); border-radius: 6px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-track { background: transparent; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -537,6 +801,12 @@ html[data-theme='night'] .tabbar { background: #0a1a20; border: 1px solid var(--
   }
   .departure { transition: opacity 0.4s ease !important; }
   .departure .dep-card { transition: opacity 0.4s ease !important; }
+  /* drop looping decoration so nothing freezes mid-animation */
+  .atmo-cloud, .atmo-snow, .atmo-ember, .atmo-mote, .atmo-birds, .atmo-shoot, .atmo-plane,
+  .atmo-shimmer, .atmo-window, .dep-speedlines, .dep-whoosh, .dep-flash, .wheel-dust,
+  .van-sheen, .beam-mote, .land-leak, .fx-layer { display: none !important; }
+  .atmo-star { opacity: 0.8 !important; }
+  .atmo-rays, .atmo-sun-glow, .atmo-moonhalo, .atmo-aurora, .atmo-lamp, .taillight { opacity: 0.16 !important; }
 }
 
 /* ---------- desktop ---------- */

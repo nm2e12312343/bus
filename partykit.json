@@ -1,5 +1,6 @@
 {
   "name": "abfahrt-sync",
   "main": "party/index.ts",
+  "serve": "public",
   "compatibilityDate": "2026-06-11"
 }

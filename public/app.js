@@ -316,8 +316,12 @@ function vanSVG(type) {
         <stop offset="0" stop-color="#bcd6d8"/><stop offset="1" stop-color="#7fa6ab"/>
       </linearGradient>
       <linearGradient id="${P}-beam" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#ffe9b0" stop-opacity="0.9"/>
+        <stop offset="0" stop-color="#ffe9b0" stop-opacity="0.55"/>
         <stop offset="1" stop-color="#ffe9b0" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="${P}-beamcore" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#fff7df" stop-opacity="0.95"/>
+        <stop offset="1" stop-color="#fff7df" stop-opacity="0"/>
       </linearGradient>
       <clipPath id="${P}-body">
         <path d="M44 200 L44 78 Q44 58 64 56 L286 47 Q314 45 330 62 L362 104 L398 111 Q412 114 414 130 L414 176 Q414 192 399 196 L362 199 A37 37 0 0 0 288 199 L172 199 A37 37 0 0 0 98 199 L52 199 Q44 199 44 192 Z"/>
@@ -325,7 +329,15 @@ function vanSVG(type) {
     </defs>
     <g class="van-rig">
       <ellipse cx="226" cy="234" rx="186" ry="9" fill="rgba(10,22,26,0.3)"/>
-      <polygon class="beam" points="416,124 500,106 500,160 416,144" fill="url(#${P}-beam)"/>
+      <g class="beam">
+        <polygon points="414,118 500,90 500,178 414,148" fill="url(#${P}-beam)"/>
+        <polygon points="414,126 500,112 500,156 414,142" fill="url(#${P}-beamcore)"/>
+        <g class="beam-mote" fill="#fff0c4">
+          <circle cx="448" cy="120" r="2.1"/><circle cx="476" cy="138" r="1.6"/>
+          <circle cx="431" cy="132" r="1.8"/><circle cx="492" cy="124" r="1.4"/>
+          <circle cx="462" cy="147" r="1.5"/>
+        </g>
+      </g>
       ${acc}
       <rect x="88" y="40" width="118" height="12" rx="2" fill="#24414d"/>
       <path d="M118 40 v12 M148 40 v12 M178 40 v12" stroke="#efe9dc" stroke-width="1.2" opacity="0.35"/>
@@ -337,6 +349,7 @@ function vanSVG(type) {
         <rect x="40" y="154" width="380" height="7" fill="#16323c"/>
         <rect x="360" y="176" width="60" height="26" fill="#25333a"/>
         <rect x="40" y="186" width="330" height="16" fill="#e6dfcd"/>
+        <g class="van-sheen"><rect x="-170" y="34" width="64" height="184" fill="#ffffff" transform="skewX(-20)"/></g>
       </g>
       <path d="M298 60 Q313 59 322 70 L350 106 L296 109 Z" fill="url(#${P}-glass)" stroke="#16323c" stroke-width="2"/>
       <path d="M304 64 L318 80" stroke="#ffffff" stroke-width="3" opacity="0.55" stroke-linecap="round"/>
@@ -360,6 +373,7 @@ function vanSVG(type) {
       <circle cx="392" cy="148" r="6" fill="none" stroke="#16323c" stroke-width="2"/>
       <rect x="400" y="122" width="13" height="15" rx="3" fill="#fff3cf" stroke="#c9a85a" stroke-width="1.5"/>
       <circle class="blinker" cx="407" cy="146" r="4" fill="#ffa019"/>
+      <circle class="taillight" cx="47" cy="131" r="12" fill="#e5533a"/>
       <rect x="44" y="122" width="7" height="17" rx="2" fill="#c9442e"/>
       <circle class="blinker" cx="48" cy="148" r="3.5" fill="#ffa019"/>
       <g fill="#b9c2bc">
@@ -367,15 +381,75 @@ function vanSVG(type) {
         <circle class="puff" cx="38" cy="194" r="6" style="--pd:0.35s"/>
         <circle class="puff" cx="38" cy="194" r="6" style="--pd:0.7s"/>
       </g>
+      <g class="wheel-dust" fill="#cdbf9c">
+        <circle cx="98" cy="206" r="7" style="--dd:0s"/>
+        <circle cx="98" cy="206" r="6" style="--dd:0.2s"/>
+        <circle cx="98" cy="206" r="8" style="--dd:0.4s"/>
+      </g>
       ${wheel(135)}${wheel(325)}
     </g>
   </svg>`;
 }
 
+/* ---------- atmosphere builders (rich scenes only: hero + departure) ---------- */
+/* Drifting cloud bank. specs: [x, y, scale, fill, opacity, durSec, delaySec]. */
+function atmoClouds(specs) {
+  return specs.map(([x, y, s, fill, op, dur, delay]) => `
+    <g class="atmo-cloud" style="--dur:${dur}s; --delay:${delay}s">
+      <g transform="translate(${x},${y}) scale(${s})" fill="${fill}" opacity="${op}">
+        <ellipse cx="0" cy="0" rx="130" ry="32"/><ellipse cx="-80" cy="13" rx="76" ry="24"/>
+        <ellipse cx="82" cy="15" rx="88" ry="22"/><ellipse cx="8" cy="-20" rx="72" ry="29"/>
+      </g></g>`).join('');
+}
+/* Twinkling star field across the upper sky. */
+function atmoStars(count, w, hMax) {
+  return Array.from({ length: count }, (_, i) => {
+    const x = (i * 769) % w, y = 30 + (i * 211) % hMax;
+    const r = (0.8 + (i % 3) * 0.7).toFixed(1);
+    const delay = (-(i * 0.41) % 3.4).toFixed(2), dur = (2 + (i % 5) * 0.7).toFixed(1);
+    return `<circle class="atmo-star" cx="${x}" cy="${y}" r="${r}" fill="#fdfaf0" style="--delay:${delay}s; --dur:${dur}s"/>`;
+  }).join('');
+}
+/* Falling/rising particles — snow, embers, warm motes — share one keyframe via --y0/--y1. */
+function atmoFall(count, kind) {
+  const C = {
+    snow:  { fill: '#eef3f6', rMin: 1.6, rStep: 0.9, y0: -40,   y1: 1300, dMin: 7,  dRange: 60 },
+    ember: { fill: '#ffb247', rMin: 1.2, rStep: 0.8, y0: 1260,  y1: 360,  dMin: 6,  dRange: 50 },
+    mote:  { fill: '#ffe6bf', rMin: 1.4, rStep: 1.0, y0: 1150,  y1: 470,  dMin: 11, dRange: 70 },
+  }[kind];
+  return Array.from({ length: count }, (_, i) => {
+    const sx = (i * 149) % 1600;
+    const dur = (C.dMin + ((i * 53) % C.dRange) / 10).toFixed(1);
+    const delay = (-((i * 1.7) % dur)).toFixed(1);
+    const drift = ((i % 5) - 2) * 42;
+    const op = (0.45 + (i % 4) * 0.16).toFixed(2);
+    const r = (C.rMin + (i % 3) * C.rStep).toFixed(1);
+    return `<g class="atmo-${kind}" style="--sx:${sx}px; --drift:${drift}px; --dur:${dur}s; --delay:${delay}s; --op:${op}; --y0:${C.y0}px; --y1:${C.y1}px"><circle r="${r}" fill="${C.fill}"/></g>`;
+  }).join('');
+}
+/* A V of birds gliding across the sky, wings flapping. */
+function atmoBirds(y, scale, dur, delay) {
+  const wing = (dx, dy) => `<path class="atmo-wing" d="M${dx} ${dy} q9 -9 18 0 q9 -9 18 0"/>`;
+  return `<g class="atmo-birds" style="--dur:${dur}s; --delay:${delay}s">
+    <g transform="translate(0,${y}) scale(${scale})" fill="none" stroke="#26343c" stroke-width="3" stroke-linecap="round">
+      ${wing(0, 0)}${wing(44, 20)}${wing(90, 6)}${wing(-42, 24)}${wing(134, 26)}
+    </g></g>`;
+}
+/* One streaking shooting star (gradient id supplied by the scene defs). */
+function atmoShoot(grad, x, y, len, dur, delay) {
+  return `<g class="atmo-shoot" style="--dur:${dur}s; --delay:${delay}s">
+    <g transform="translate(${x},${y}) rotate(26)">
+      <rect x="0" y="-1.1" width="${len}" height="2.2" rx="1.1" fill="url(#${grad})"/>
+      <circle cx="${len}" cy="0" r="2.4" fill="#fff"/>
+    </g></g>`;
+}
+
 /* Landscape scenes. viewBox 1600×1400, bottom-anchored slice; the focal
    composition sits in x 500–1100 so portrait crops still frame it. Layers
-   extend to x≈2600 to survive the parallax drift. */
-function sceneSVG(type) {
+   extend to x≈2600 to survive the parallax drift. `rich` (hero + departure)
+   adds animated weather, celestial motion, and particle systems. */
+function sceneSVG(type, opts = {}) {
+  const rich = !!opts.rich;
   const P = 's' + uid();
   const road = `
     <g class="l-road">
@@ -385,7 +459,7 @@ function sceneSVG(type) {
         `<rect x="${-160 + i * 140}" y="1314" width="56" height="9" rx="3" fill="#e8dfc8" opacity="0.85"/>`).join('')}
     </g>`;
 
-  let defs = '', far = '', mid = '', near = '';
+  let defs = '', sky = '', far = '', cloud = '', mid = '', near = '', weather = '';
 
   if (type === 'beach') {
     defs = `<linearGradient id="${P}-sky" x1="0" y1="0" x2="0" y2="1">
@@ -409,6 +483,23 @@ function sceneSVG(type) {
         const x = 80 + i * 190 + (i * 71) % 50, y = 1190 + (i * 31) % 36;
         return `<path d="M${x} ${y} q-7 -26 -3 -34 M${x} ${y} q2 -26 9 -32 M${x} ${y} q9 -20 15 -23" stroke="#7a6a45" stroke-width="2.5" fill="none" stroke-linecap="round"/>`;
       }).join('')}`;
+    if (rich) {
+      sky = `
+        <g transform="translate(850,930)"><g class="atmo-rays">${
+          Array.from({ length: 16 }, (_, i) =>
+            `<path d="M-44 -150 L-13 -560 L13 -560 L44 -150 Z" transform="rotate(${(i * 22.5).toFixed(1)})" fill="#fff1cf"/>`).join('')
+        }</g></g>
+        <circle class="atmo-sun-glow" cx="850" cy="930" r="188" fill="#fff3d0"/>`;
+      // shimmer streaks dancing on the sea
+      far += Array.from({ length: 20 }, (_, i) =>
+        `<rect class="atmo-shimmer" x="${30 + i * 150 + (i * 37) % 40}" y="${1022 + (i * 53) % 108}" width="${44 + (i * 29) % 70}" height="3" rx="1.5" fill="#fff1c8" style="--delay:${(i * 0.27).toFixed(2)}s; --dur:${(2.4 + (i % 5) * 0.6).toFixed(1)}s"/>`).join('');
+      cloud = atmoClouds([
+        [320, 360, 1.15, '#ffe7c6', 0.5, 92, -8],
+        [1180, 250, 0.9, '#ffd9ad', 0.42, 78, -44],
+        [760, 470, 0.7, '#ffeccf', 0.34, 110, -70],
+      ]) + atmoBirds(560, 1.25, 46, -12);
+      weather = atmoFall(16, 'mote');
+    }
   } else if (type === 'mountain') {
     defs = `<linearGradient id="${P}-sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1b2b4d"/><stop offset="0.55" stop-color="#41557a"/>
@@ -429,6 +520,24 @@ function sceneSVG(type) {
       const h = 90 + (i * 67) % 70, base = 1252;
       return `<path d="M${x} ${base} L${x + 26} ${base - h} L${x + 52} ${base} Z M${x + 6} ${base - h * 0.45} L${x + 26} ${base - h - h * 0.32} L${x + 46} ${base - h * 0.45} Z" fill="#131f2c"/>`;
     }).join('');
+    if (rich) {
+      defs += `<linearGradient id="${P}-aur" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#74ffcb" stop-opacity="0"/><stop offset="0.45" stop-color="#52e0a8" stop-opacity="0.55"/>
+          <stop offset="0.75" stop-color="#7c9bff" stop-opacity="0.32"/><stop offset="1" stop-color="#7c9bff" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="${P}-shoot" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0.95"/>
+        </linearGradient>`;
+      sky = `<path class="atmo-aurora" d="M-200 300 Q360 170 920 320 T2000 280 L2000 560 Q1440 440 760 540 T-200 520 Z" fill="url(#${P}-aur)"/>
+        <circle class="atmo-moonhalo" cx="1040" cy="420" r="120" fill="#dfe7f2"/>
+        ${atmoStars(34, 1600, 620)}
+        ${atmoShoot(`${P}-shoot`, 180, 210, 150, 9, -3)}`;
+      cloud = atmoClouds([
+        [520, 300, 0.85, '#46577d', 0.40, 120, -20],
+        [1320, 220, 0.70, '#3d4d72', 0.34, 150, -80],
+      ]);
+      weather = atmoFall(28, 'snow');
+    }
   } else {
     defs = `<linearGradient id="${P}-sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0e1830"/><stop offset="0.6" stop-color="#22386a"/>
@@ -463,14 +572,38 @@ function sceneSVG(type) {
         <circle cx="${x + 20}" cy="1112" r="26" fill="#ffd98e" opacity="0.16"/>
       </g>`;
     }).join('') + `<rect x="-200" y="1238" width="3000" height="4" fill="#2c3a55"/>`;
+    if (rich) {
+      defs += `<linearGradient id="${P}-shoot" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0.95"/>
+        </linearGradient>`;
+      sky = `<circle class="atmo-moonhalo" cx="980" cy="380" r="96" fill="#cfe0ff"/>
+        ${atmoStars(30, 1600, 600)}
+        ${atmoShoot(`${P}-shoot`, 1180, 170, 150, 11, -5)}
+        <g class="atmo-plane" style="--dur:26s; --delay:-7s"><circle cx="0" cy="150" r="2.6" fill="#ff5230"/></g>`;
+      cloud = atmoClouds([
+        [420, 470, 1.05, '#2a3a63', 0.42, 100, -16],
+        [1240, 410, 0.85, '#243152', 0.36, 132, -64],
+      ]);
+      // a few extra windows that flicker on and off
+      mid += Array.from({ length: 14 }, (_, i) => {
+        const x = 120 + (i * 173) % 1380, y = 760 + (i * 97) % 420;
+        return `<rect class="atmo-window" x="${x}" y="${y}" width="11" height="16" fill="#ffd98e" style="--delay:${(-(i * 0.9) % 6).toFixed(1)}s; --dur:${(3 + (i % 4) * 1.3).toFixed(1)}s"/>`;
+      }).join('');
+      const lampGlow = Array.from({ length: 8 }, (_, i) =>
+        `<circle class="atmo-lamp" cx="${40 + i * 360 + 20}" cy="1112" r="34" fill="#ffd98e" style="--delay:${(i * 0.4).toFixed(1)}s"/>`).join('');
+      weather = atmoFall(18, 'ember') + lampGlow;
+    }
   }
 
   return `<svg viewBox="0 0 1600 1400" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
     <defs>${defs}</defs>
     <rect x="-200" y="0" width="3000" height="1400" fill="url(#${P}-sky)"/>
+    <g class="l-sky">${sky}</g>
     <g class="l-far">${far}</g>
+    <g class="l-cloud">${cloud}</g>
     <g class="l-mid">${mid}</g>
     <g class="l-near">${near}</g>
+    <g class="l-weather">${weather}</g>
     ${road}
   </svg>`;
 }
@@ -744,6 +877,9 @@ function render() {
     : local.tab === 'crew' ? vCrew()
     : vSettings();
   justStamped = null;
+  const tabs = ['checklist', 'templates', 'crew', 'settings'];
+  const tb = $('#tabbar');
+  if (tb) tb.style.setProperty('--ti', Math.max(0, tabs.indexOf(local.tab)));
   document.querySelectorAll('.tab').forEach((b) =>
     b.classList.toggle('active', b.dataset.tab === local.tab));
   animateRoad();
@@ -764,17 +900,51 @@ function animateRoad() {
     set(from);
     v.getBoundingClientRect();
     requestAnimationFrame(() => { v.style.transition = ''; set(p); });
+    // wheels spin + suspension bobs + dust kicks for the length of the drive
+    if (!reducedMotion) {
+      v.classList.add('driving');
+      clearTimeout(v._driveT);
+      v._driveT = setTimeout(() => v.classList.remove('driving'), 850);
+    }
   } else {
     set(p);
   }
   prevRoadP = p;
 }
 
+/* ---------- tap FX — lives in a body overlay so a re-render can't wipe it ---------- */
+let fxLayer = null;
+function fxAt(x, y, kind) {
+  if (reducedMotion || x == null) return;
+  if (!fxLayer) { fxLayer = document.createElement('div'); fxLayer.className = 'fx-layer'; document.body.appendChild(fxLayer); }
+  if (kind === 'ripple') {
+    const r = document.createElement('span');
+    r.className = 'fx-ripple';
+    r.style.left = x + 'px'; r.style.top = y + 'px';
+    fxLayer.appendChild(r);
+    setTimeout(() => r.remove(), 640);
+  } else { // ink splatter burst
+    const n = 11;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('span');
+      s.className = 'fx-ink';
+      const ang = (Math.PI * 2 * i) / n + Math.random() * 0.6;
+      const dist = 14 + Math.random() * 32;
+      s.style.left = x + 'px'; s.style.top = y + 'px';
+      s.style.setProperty('--dx', (Math.cos(ang) * dist).toFixed(1) + 'px');
+      s.style.setProperty('--dy', (Math.sin(ang) * dist).toFixed(1) + 'px');
+      s.style.setProperty('--sz', (3 + Math.random() * 4).toFixed(1) + 'px');
+      fxLayer.appendChild(s);
+      setTimeout(() => s.remove(), 720);
+    }
+  }
+}
+
 /* ============================================================
    ACTIONS
    ============================================================ */
 const actions = {
-  toggle(d) {
+  toggle(d, el, e) {
     if (!canEdit()) return;
     const id = d.id;
     if (S.checked[id]) {
@@ -783,6 +953,8 @@ const actions = {
       S.checked[id] = { by: me().name, at: Date.now() };
       justStamped = id;
       if (local.sound) sndClick();
+      if (navigator.vibrate) navigator.vibrate(14);
+      if (e) { fxAt(e.clientX, e.clientY, 'ripple'); fxAt(e.clientX, e.clientY, 'ink'); }
     }
     const before = lastP;
     commit();
@@ -909,12 +1081,16 @@ const actions = {
   },
   resumeTrip(d) { enterApp(d.code); },
   toggleAmbient(d, el) {
+    const txt = el.querySelector('.land-sound-txt');
     if (ambient) {
       stopAmbient();
-      el.textContent = 'Sound on';
+      el.classList.remove('playing');
+      if (txt) txt.textContent = 'Sound on';
     } else {
       startAmbient();
-      el.textContent = ambient ? 'Sound off' : 'Sound on';
+      const on = !!ambient;
+      el.classList.toggle('playing', on);
+      if (txt) txt.textContent = on ? 'Sound off' : 'Sound on';
     }
   },
   archiveTrip() {
@@ -970,10 +1146,22 @@ async function runDeparture(preview) {
   const type = tpl()?.type || 'beach';
   const seq = D.dataset.seq = uid(); // cancels stale async runs if reopened
 
-  $('#sceneMount').innerHTML = sceneSVG(type) + `<div class="dep-van${reducedMotion ? ' stay' : ''}">${vanSVG(type)}</div>`;
+  // Speed streaks that rip across the frame while rolling.
+  const speedLines = Array.from({ length: 20 }, (_, i) =>
+    `<i style="--y:${(4 + i * 4.7).toFixed(1)}%; --d:${((i % 6) * 0.05).toFixed(2)}s; --len:${30 + (i * 37) % 48}vw; --o:${(0.22 + (i % 4) * 0.14).toFixed(2)}"></i>`).join('');
+
+  $('#sceneMount').innerHTML =
+    sceneSVG(type, { rich: true })
+    + `<div class="dep-van${reducedMotion ? ' stay' : ''}">${vanSVG(type)}</div>`
+    + `<div class="dep-speedlines" aria-hidden="true">${speedLines}</div>`
+    + `<div class="dep-whoosh" aria-hidden="true"><span class="km-sign">KM 0</span></div>`
+    + `<div class="dep-flash" aria-hidden="true"></div>`
+    + `<div class="dep-vignette" aria-hidden="true"></div>`
+    + `<div class="dep-clear" aria-hidden="true"><span>Klar zur Abfahrt</span></div>`;
+
   const n = allItems().length;
   $('#depCard').innerHTML = `
-    <div class="dep-stamp">ABGEFAHREN</div>
+    <div class="dep-stamp">ABGEFAHREN<span class="dep-splatter" aria-hidden="true"></span></div>
     <p class="dep-kicker">Pre-departure complete · ${n}/${n}</p>
     <h2 class="dep-trip">${esc(S.trip.name)}</h2>
     <p class="dep-time">Departed ${fmtDateTime(Date.now())} · ${esc(S.van)}</p>
@@ -997,14 +1185,17 @@ async function runDeparture(preview) {
   await wait(700);
   if (D.dataset.seq !== seq) return;
   D.classList.add('ignition');
+  if (navigator.vibrate) navigator.vibrate([18, 60, 18, 60, 28]);
   await wait(1900);
   if (D.dataset.seq !== seq) return;
   D.classList.remove('ignition');
   D.classList.add('rolling');
+  if (navigator.vibrate) navigator.vibrate(180);
   await wait(3650);
   if (D.dataset.seq !== seq) return;
   D.classList.remove('rolling');
   D.classList.add('arrived');
+  if (navigator.vibrate) navigator.vibrate([40, 30, 90]);
 }
 
 /* ============================================================
@@ -1013,6 +1204,7 @@ async function runDeparture(preview) {
 const LAND = $('#landing');
 let landIO = null;
 let landScrollFn = null;
+let landPointerFn = null;
 
 /* One logbook postcard — completed trips are stamped memories, open ones glow. */
 function landTripCard(t, i) {
@@ -1037,15 +1229,28 @@ function renderLanding() {
   LAND.innerHTML = `<div class="land-wrap">
     <div class="land-hero">
       <div class="land-stage">
-        <div class="land-scene">${sceneSVG(heroType)}</div>
-        <div class="land-van" id="landVan">${vanSVG(heroType)}</div>
+        <div class="land-parallax" id="landParallax">
+          <div class="land-scene">${sceneSVG(heroType, { rich: true })}</div>
+          <div class="land-van" id="landVan">${vanSVG(heroType)}</div>
+        </div>
+        <div class="land-skygrade" id="landSkygrade"></div>
         <div class="land-grain"></div>
+        <div class="land-vignette" aria-hidden="true"></div>
+        <div class="land-leak" aria-hidden="true"></div>
         <div class="land-head">
           <p class="kicker">One van · one crew · one list</p>
           <h1 class="land-brand">ABFAHRT<span>.</span></h1>
           <p class="land-tag">The walkaround before every departure — shared live with everyone aboard The Crafter, until every latch is checked.</p>
         </div>
-        <button class="land-sound" data-action="toggleAmbient">Sound on</button>
+        <button class="land-sound" data-action="toggleAmbient">
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span class="land-sound-txt">Sound on</span>
+        </button>
+        <div class="land-odo" aria-hidden="true">
+          <span class="land-odo-key">Distanz</span>
+          <span class="land-odo-val" id="odoVal">000.0</span>
+          <span class="land-odo-unit">km</span>
+        </div>
         <div class="land-scrollhint">Roll on<span class="land-arrow">↓</span></div>
       </div>
     </div>
@@ -1096,12 +1301,17 @@ function initLandingFx() {
   LAND.querySelectorAll('.reveal').forEach((el) => landIO.observe(el));
 
   if (landScrollFn) { removeEventListener('scroll', landScrollFn); landScrollFn = null; }
+  if (landPointerFn) { landPointerFn(); landPointerFn = null; }
   if (reducedMotion) { LAND.classList.add('static'); return; }
 
   const van = $('#landVan');
   const far = LAND.querySelector('.land-scene .l-far');
   const mid = LAND.querySelector('.land-scene .l-mid');
+  const near = LAND.querySelector('.land-scene .l-near');
+  const cloud = LAND.querySelector('.land-scene .l-cloud');
   const hero = LAND.querySelector('.land-hero');
+  const odo = $('#odoVal');
+  const sky = $('#landSkygrade');
   let raf = null;
   landScrollFn = () => {
     if (raf) return;
@@ -1116,11 +1326,35 @@ function initLandingFx() {
       van.classList.toggle('moving', p > 0.02 && p < 0.96);
       van.querySelectorAll('.wheelspin').forEach((w) => { w.style.transform = `rotate(${dx * 3.2}deg)`; });
       if (far) far.style.transform = `translateX(${-eased * 55}px)`;
+      if (cloud) cloud.style.transform = `translateX(${-eased * 100}px)`;
       if (mid) mid.style.transform = `translateX(${-eased * 150}px)`;
+      if (near) near.style.transform = `translateX(${-eased * 250}px)`;
+      if (odo) odo.textContent = (eased * 888).toFixed(1).padStart(5, '0');
+      if (sky) sky.style.opacity = (p * 0.7).toFixed(3);
     });
   };
   addEventListener('scroll', landScrollFn, { passive: true });
   landScrollFn();
+
+  // Desktop only: pointer parallax — the scene leans into the cursor.
+  const parallax = $('#landParallax');
+  const head = LAND.querySelector('.land-head');
+  if (parallax && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    const stage = LAND.querySelector('.land-stage');
+    let praf = null, tx = 0, ty = 0;
+    const onMove = (e) => {
+      tx = (e.clientX / innerWidth - 0.5);
+      ty = (e.clientY / innerHeight - 0.5);
+      if (praf) return;
+      praf = requestAnimationFrame(() => {
+        praf = null;
+        parallax.style.transform = `translate(${(-tx * 26).toFixed(1)}px, ${(-ty * 16).toFixed(1)}px) scale(1.05)`;
+        if (head) head.style.transform = `translate(${(tx * 16).toFixed(1)}px, ${(ty * 10).toFixed(1)}px)`;
+      });
+    };
+    stage.addEventListener('pointermove', onMove, { passive: true });
+    landPointerFn = () => stage.removeEventListener('pointermove', onMove);
+  }
 }
 
 function showLanding() {
@@ -1138,6 +1372,7 @@ function enterApp(code) {
   if (wrap) wrap.style.transform = `translateY(${-scrollY}px)`;
   LAND.classList.add('leave');
   if (landScrollFn) { removeEventListener('scroll', landScrollFn); landScrollFn = null; }
+  if (landPointerFn) { landPointerFn(); landPointerFn = null; }
   bootRoom(code);
   document.body.classList.remove('landing');
   scrollTo(0, 0);
@@ -1158,7 +1393,7 @@ function setTab(tab) { local.tab = tab; saveLocal(); render(); }
 
 document.body.addEventListener('click', (e) => {
   const tabBtn = e.target.closest('[data-tab]');
-  if (tabBtn) { setTab(tabBtn.dataset.tab); return; }
+  if (tabBtn) { if (navigator.vibrate) navigator.vibrate(8); setTab(tabBtn.dataset.tab); return; }
   const b = e.target.closest('[data-action]');
   if (b && actions[b.dataset.action]) actions[b.dataset.action](b.dataset, b, e);
 });
